@@ -1,33 +1,14 @@
 package com.microsoft.hackathon.quarkus;
 
 import io.quarkus.test.junit.QuarkusTest;
+import jakarta.ws.rs.core.Response;
 import org.junit.jupiter.api.Test;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.CoreMatchers.is;
 
-
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-
-import org.junit.jupiter.api.Test;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-
-import jakarta.ws.rs.client.*;
-import jakarta.ws.rs.core.Response;
-
-import org.junit.jupiter.api.Test;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.Mockito.*;
-
-import jakarta.ws.rs.core.*;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import javax.ws.rs.core.MultivaluedMap;
-import javax.ws.rs.core.UriInfo;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @QuarkusTest
 public class DemoResourceTest {
@@ -162,26 +143,70 @@ public class DemoResourceTest {
 
     @Test
     public void testParseUrl() {
-        // Arrange
-        String inputUrl = "http://example.com:8080/test/path?param=value";
-        UriInfo uriInfo = mock(UriInfo.class);
-        MultivaluedMap<String, String> queryParams = new MultivaluedHashMap<>();
-        queryParams.add("url", inputUrl);
-        when(uriInfo.getQueryParameters()).thenReturn(queryParams);
-
         DemoResource demoResource = new DemoResource();
-        demoResource.uriInfo = uriInfo;
 
-        // Act
-        String result = demoResource.parseUrl(); // Call without parameters
+        // Test with a valid URL
+        String validUrl = "https://example.com:8080/test?param=value";
+        String validResult = demoResource.parseUrl(validUrl);
+        assertTrue(validResult.contains("\"protocol\":\"https\""));
+        assertTrue(validResult.contains("\"host\":\"example.com\""));
+        assertTrue(validResult.contains("\"port\":8080"));
+        assertTrue(validResult.contains("\"path\":\"/test\""));
+        assertTrue(validResult.contains("\"query\":\"param=value\""));
 
-        // Assert
-        JsonObject jsonObject = JsonParser.parseString(result).getAsJsonObject();
-        assertEquals("http", jsonObject.get("protocol").getAsString());
-        assertEquals("example.com", jsonObject.get("host").getAsString());
-        assertEquals(8080, jsonObject.get("port").getAsInt());
-        assertEquals("/test/path", jsonObject.get("path").getAsString());
-        assertEquals("param=value", jsonObject.get("query").getAsString());
+        // Test with an invalid URL
+        String invalidUrl = "not a valid url";
+        String invalidResult = demoResource.parseUrl(invalidUrl);
+        assertEquals("{\"error\": \"Invalid URL\"}", invalidResult);
+    }
+
+    @Test
+    public void testListFilesAndFolders() {
+        DemoResource demoResource = new DemoResource();
+
+        // Test with a valid path
+        String validPath = System.getProperty("user.dir"); // This will get the current working directory
+        String validResult = demoResource.listFilesAndFolders(validPath);
+        assertTrue(validResult.contains(validPath)); // The current directory itself should be in the result
+
+        // Test with an invalid path
+        String invalidPath = "not a valid path";
+        String invalidResult = demoResource.listFilesAndFolders(invalidPath);
+        assertEquals("{\"error\": \"Path does not exist\"}", invalidResult);
+    }
+
+    @Test
+    public void testCountWord() {
+        DemoResource demoResource = new DemoResource();
+
+        // Test with a valid file path and a word
+        String validPath = System.getProperty("user.dir") + "/src/main/resources/colors.json"; // This will get the path to the test file
+
+        System.out.println(validPath);
+
+        String word = "255";
+        String validResult = demoResource.countWord(validPath, word);
+        assertTrue(validResult.contains("\"count\": 8")); // The word "test" appears twice in the test file
+
+        // Test with an invalid file path
+        String invalidPath = "not a valid path";
+        String invalidResult = demoResource.countWord(invalidPath, word);
+        assertEquals("{\"error\": \"File does not exist\"}", invalidResult);
+    }
+
+    @Test
+    public void testZipFolder() {
+        DemoResource demoResource = new DemoResource();
+
+        // Test with a valid folder path
+        String validPath = System.getProperty("user.dir"); // This will get the current working directory
+        Response validResponse = demoResource.zipFolder(validPath);
+        assertEquals(200, validResponse.getStatus()); // The status should be 200 (OK)
+
+        // Test with an invalid folder path
+        String invalidPath = "not a valid path";
+        Response invalidResponse = demoResource.zipFolder(invalidPath);
+        assertEquals(400, invalidResponse.getStatus()); // The status should be 400 (Bad Request)
     }
 
 }

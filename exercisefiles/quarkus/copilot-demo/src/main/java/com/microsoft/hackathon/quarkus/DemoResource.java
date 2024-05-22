@@ -6,17 +6,18 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 
+import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import com.google.gson.Gson;
 
 import java.util.List;
 import java.util.Optional;
-import java.io.Reader;
+
 import com.google.gson.reflect.TypeToken;
 
 import jakarta.ws.rs.client.Client;
@@ -26,7 +27,15 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import java.net.URL;
-import com.google.gson.JsonObject;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
+
+import jakarta.ws.rs.core.StreamingOutput;
+
+import java.io.IOException;
+import java.io.OutputStream;
 
 /* 
 * The Demo resource should be mapped to the root path.
@@ -157,6 +166,82 @@ public class DemoResource {
         } catch (Exception e) {
             return "{\"error\": \"Invalid URL\"}";
         }
+    }
+
+    @Path("/list-files-folders")
+    @GET
+    @Produces(MediaType.APPLICATION_JSON)
+    public String listFilesAndFolders(@QueryParam("path") String pathString) {
+        try {
+            java.nio.file.Path path = Paths.get(pathString);
+            if (Files.exists(path)) {
+                List<String> filesAndFolders = Files.walk(path, 1)
+                        .map(java.nio.file.Path::toString)
+                        .collect(Collectors.toList());
+                return new Gson().toJson(filesAndFolders);
+            } else {
+                return "{\"error\": \"Path does not exist\"}";
+            }
+        } catch (Exception e) {
+            return "{\"error\": \"Error reading path\"}";
+        }
+    }
+
+    @Path("/count-word")
+    @GET
+    @Produces(MediaType.APPLICATION_JSON)
+    public String countWord(@QueryParam("path") String pathString, @QueryParam("word") String word) {
+        try {
+            java.nio.file.Path path = Paths.get(pathString);
+            if (Files.exists(path)) {
+                try (Stream<String> lines = Files.lines(path)) {
+                    long count = lines
+                            .flatMap(line -> Stream.of(line.split("\\W+")))
+                            .filter(word::equalsIgnoreCase)
+                            .count();
+                    return "{\"count\": " + count + "}";
+                }
+            } else {
+                return "{\"error\": \"File does not exist\"}";
+            }
+        } catch (Exception e) {
+            return "{\"error\": \"Error reading file\"}";
+        }
+    }
+
+    @Path("/zip-folder")
+    @GET
+    @Produces("application/zip")
+    public Response zipFolder(@QueryParam("path") String pathString) {
+        java.nio.file.Path folderPath = Paths.get(pathString);
+        if (!Files.exists(folderPath) || !Files.isDirectory(folderPath)) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity("{\"error\": \"Invalid folder path\"}")
+                    .type(MediaType.APPLICATION_JSON)
+                    .build();
+        }
+
+        StreamingOutput stream = new StreamingOutput() {
+            @Override
+            public void write(OutputStream os) throws IOException {
+                try (ZipOutputStream zos = new ZipOutputStream(os)) {
+                    Files.walk(folderPath).forEach(path -> {
+                        if (Files.isRegularFile(path)) {
+                            ZipEntry zipEntry = new ZipEntry(folderPath.relativize(path).toString());
+                            try {
+                                zos.putNextEntry(zipEntry);
+                                Files.copy(path, zos);
+                                zos.closeEntry();
+                            } catch (IOException e) {
+                                throw new RuntimeException(e);
+                            }
+                        }
+                    });
+                }
+            }
+        };
+
+        return Response.ok(stream).header("Content-Disposition", "attachment; filename=\"folder.zip\"").build();
     }
 
 }
